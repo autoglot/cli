@@ -10,6 +10,7 @@ export interface TranslateOptions {
   apiKey: string;
   apiUrl?: string;
   skipCache?: boolean;
+  project?: string;
   onProgress?: (status: JobStatus) => void;
 }
 
@@ -23,6 +24,7 @@ export async function translate(
     targetLanguages: opts.targetLanguages,
     sourceLanguage: opts.sourceLanguage,
     skipCache: opts.skipCache ?? false,
+    project: opts.project,
   });
 
   await pollUntilDone(config, jobId, opts.onProgress ?? (() => {}));

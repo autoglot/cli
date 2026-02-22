@@ -13,6 +13,7 @@ interface ParsedArgs {
   output: string;
   apiKey?: string;
   apiUrl?: string;
+  project?: string;
   noCache: boolean;
 }
 
@@ -28,6 +29,7 @@ Options:
   --source, -s          Source language (default: auto-detect from filename, fallback "en")
   --output, -o          Output directory (default: same directory as input file)
   --api-key, -k         API key (default: AUTOGLOT_API_KEY env var)
+  --project, -p         Project to use for glossary/style guide (owner/repo format)
   --api-url             API base URL (default: https://api.autoglot.app)
   --no-cache            Skip translation cache
   --help, -h            Show this help message
@@ -68,6 +70,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   let output = "";
   let apiKey: string | undefined;
   let apiUrl: string | undefined;
+  let project: string | undefined;
   let noCache = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -91,6 +94,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--api-url":
         apiUrl = args[++i];
+        break;
+      case "--project":
+      case "-p":
+        project = args[++i];
         break;
       case "--no-cache":
         noCache = true;
@@ -129,6 +136,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     output: resolve(output),
     apiKey,
     apiUrl,
+    project,
     noCache,
   };
 }
@@ -176,6 +184,7 @@ async function main() {
       targetLanguages: args.lang,
       sourceLanguage: args.source,
       skipCache: args.noCache,
+      project: args.project,
     });
     jobId = result.job_id;
     spinner.stop(`Uploaded ${filename} (job: ${jobId})`);

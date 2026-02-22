@@ -37,6 +37,7 @@ autoglot <file> --lang <codes> [options]
 | `--lang` | `-l` | (required) | Comma-separated target languages |
 | `--source` | `-s` | Auto-detect from filename, fallback `en` | Source language code |
 | `--output` | `-o` | Same directory as input file | Output directory for translated files |
+| `--project` | `-p` | | Project for glossary/style guide (`owner/repo` format) |
 | `--api-key` | `-k` | `AUTOGLOT_API_KEY` env var | API key |
 | `--api-url` | | `https://api.autoglot.app` | API base URL |
 | `--no-cache` | | `false` | Skip translation cache |
@@ -55,6 +56,12 @@ Translate a PO file with explicit source language and output directory:
 
 ```bash
 npx @autoglot/cli messages.po --lang ja,ko --source en --output ./translations
+```
+
+Use a project's glossary and style guide:
+
+```bash
+npx @autoglot/cli en.json --lang es,fr --project acme/my-app
 ```
 
 Skip cache to force re-translation:
@@ -95,6 +102,7 @@ for (const file of files) {
 | `sourceLanguage` | `string` | Yes | | Source language code |
 | `apiKey` | `string` | Yes | | API key |
 | `apiUrl` | `string` | No | `https://api.autoglot.app` | API base URL |
+| `project` | `string` | No | | Project for glossary/style guide (`owner/repo`) |
 | `skipCache` | `boolean` | No | `false` | Skip translation cache |
 | `onProgress` | `(status: JobStatus) => void` | No | | Progress callback |
 

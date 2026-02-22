@@ -56,15 +56,20 @@ export async function createJob(
     targetLanguages: string[];
     sourceLanguage: string;
     skipCache: boolean;
+    project?: string;
   }
 ): Promise<TranslateResponse> {
-  return request<TranslateResponse>(config, "POST", "translate", {
+  const body: Record<string, unknown> = {
     files: opts.files,
     target_languages: opts.targetLanguages,
     source_language: opts.sourceLanguage,
     output_mode: "local",
     skip_cache: opts.skipCache,
-  });
+  };
+  if (opts.project) {
+    body.project = opts.project;
+  }
+  return request<TranslateResponse>(config, "POST", "translate", body);
 }
 
 export async function getJobStatus(
