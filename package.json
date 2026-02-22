@@ -1,0 +1,35 @@
+{
+  "name": "@autoglot/cli",
+  "version": "0.1.0",
+  "description": "Translate i18n files using autoglot",
+  "bin": {
+    "autoglot": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "i18n",
+    "translation",
+    "localization",
+    "gettext",
+    "po",
+    "json",
+    "yaml"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}
