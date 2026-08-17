@@ -3,7 +3,14 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname, basename, extname } from "node:path";
 import { resolveConfig } from "./config.js";
-import { createJob, pollUntilDone, downloadFiles } from "./api.js";
+import {
+  createJob,
+  pollUntilDone,
+  downloadFiles,
+  requestFallback,
+  TranslationJobFailedError,
+  TranslationTimeoutError,
+} from "./api.js";
 import { Spinner } from "./progress.js";
 
 interface ParsedArgs {
@@ -14,6 +21,7 @@ interface ParsedArgs {
   apiKey?: string;
   apiUrl?: string;
   project?: string;
+  timeoutSeconds?: number;
   noCache: boolean;
 }
 
@@ -31,6 +39,7 @@ Options:
   --api-key, -k         API key (default: AUTOGLOT_API_KEY env var)
   --project, -p         Project to use for glossary/style guide (owner/repo format)
   --api-url             API base URL (default: https://api.autoglot.app)
+  --timeout             Maximum translation wait in seconds, then use the project's cached artifact
   --no-cache            Skip translation cache
   --help, -h            Show this help message
   --version, -v         Show version
@@ -71,6 +80,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   let apiKey: string | undefined;
   let apiUrl: string | undefined;
   let project: string | undefined;
+  let timeoutSeconds: number | undefined;
   let noCache = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -99,6 +109,15 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "-p":
         project = args[++i];
         break;
+      case "--timeout": {
+        const value = Number(args[++i]);
+        if (!Number.isFinite(value) || value <= 0) {
+          console.error("Error: --timeout must be a positive number of seconds");
+          process.exit(1);
+        }
+        timeoutSeconds = value;
+        break;
+      }
       case "--no-cache":
         noCache = true;
         break;
@@ -121,6 +140,11 @@ function parseArgs(argv: string[]): ParsedArgs {
     process.exit(1);
   }
 
+  if (timeoutSeconds !== undefined && !project) {
+    console.error("Error: --project is required with --timeout so cached translations cannot cross projects");
+    process.exit(1);
+  }
+
   const resolvedFile = resolve(file);
   if (!source) {
     source = detectSourceLanguage(basename(resolvedFile));
@@ -137,6 +161,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     apiKey,
     apiUrl,
     project,
+    timeoutSeconds,
     noCache,
   };
 }
@@ -197,6 +222,8 @@ async function main() {
 
   // Poll
   spinner.start("Translating...");
+  let outputFiles: Array<{ filename: string; content: string }> | undefined;
+  let usedFallback = false;
   try {
     await pollUntilDone(config, jobId, (status) => {
       if (status.total_strings > 0) {
@@ -204,27 +231,44 @@ async function main() {
           `Translating... ${status.completed_strings}/${status.total_strings} strings (${status.progress}%)`
         );
       }
-    });
+    }, { timeoutSeconds: args.timeoutSeconds });
     spinner.stop("Translation complete");
   } catch (err: unknown) {
+    const fallbackEligible = err instanceof TranslationTimeoutError ||
+      err instanceof TranslationJobFailedError;
+    if (args.timeoutSeconds !== undefined && fallbackEligible) {
+      const reason = err instanceof TranslationTimeoutError ? "timed out" : "failed";
+      spinner.stop(`Translation ${reason}; loading the latest compatible cached translations...`);
+      try {
+        const fallback = await requestFallback(config, jobId);
+        outputFiles = fallback.files;
+        usedFallback = fallback.fallback_used;
+      } catch (fallbackError: unknown) {
+        const msg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        console.error(`Error: ${msg}`);
+        process.exit(1);
+      }
+    } else {
     const msg = err instanceof Error ? err.message : String(err);
     spinner.stop();
     console.error(`Error: ${msg}`);
     process.exit(1);
+    }
   }
 
   // Download
-  spinner.start("Downloading translated files...");
-  let outputFiles: Array<{ filename: string; content: string }>;
-  try {
-    const result = await downloadFiles(config, jobId);
-    outputFiles = result.files;
-    spinner.stop(`Downloaded ${outputFiles.length} file(s)`);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    spinner.stop();
-    console.error(`Error: ${msg}`);
-    process.exit(1);
+  if (!outputFiles) {
+    spinner.start("Downloading translated files...");
+    try {
+      const result = await downloadFiles(config, jobId);
+      outputFiles = result.files;
+      spinner.stop(`Downloaded ${outputFiles.length} file(s)`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      spinner.stop();
+      console.error(`Error: ${msg}`);
+      process.exit(1);
+    }
   }
 
   // Write files
@@ -241,7 +285,7 @@ async function main() {
   }
 
   console.log(
-    `\nTranslated ${filename} into ${args.lang.join(", ")} (${outputFiles.length} file(s))`
+    `\n${usedFallback ? "Used cached translations for" : "Translated"} ${filename} into ${args.lang.join(", ")} (${outputFiles.length} file(s))`
   );
 }
 

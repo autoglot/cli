@@ -1,6 +1,6 @@
 {
   "name": "@autoglot/cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Translate i18n files using autoglot",
   "bin": {
     "autoglot": "./dist/cli.js"
@@ -12,7 +12,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "files": [
     "dist"

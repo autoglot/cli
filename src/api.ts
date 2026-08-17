@@ -21,11 +21,32 @@ interface DownloadResponse {
   files: Array<{ filename: string; content: string }>;
 }
 
+export interface FallbackResponse extends DownloadResponse {
+  job_id: string;
+  status: string;
+  fallback_used: boolean;
+}
+
+export class TranslationTimeoutError extends Error {
+  constructor(public readonly jobId: string, public readonly timeoutSeconds: number) {
+    super(`Translation did not complete within ${timeoutSeconds} seconds`);
+    this.name = "TranslationTimeoutError";
+  }
+}
+
+export class TranslationJobFailedError extends Error {
+  constructor(public readonly jobId: string, message: string) {
+    super(message);
+    this.name = "TranslationJobFailedError";
+  }
+}
+
 async function request<T>(
   config: Config,
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  signal?: AbortSignal
 ): Promise<T> {
   const url = `${config.apiUrl}/v1/${path}`;
   const headers: Record<string, string> = {
@@ -37,6 +58,7 @@ async function request<T>(
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   const json = (await res.json()) as T & { error?: string };
@@ -74,9 +96,10 @@ export async function createJob(
 
 export async function getJobStatus(
   config: Config,
-  jobId: string
+  jobId: string,
+  signal?: AbortSignal
 ): Promise<JobStatus> {
-  return request<JobStatus>(config, "GET", `translate/${jobId}`);
+  return request<JobStatus>(config, "GET", `translate/${jobId}`, undefined, signal);
 }
 
 export async function downloadFiles(
@@ -86,25 +109,62 @@ export async function downloadFiles(
   return request<DownloadResponse>(config, "GET", `translate/${jobId}/download`);
 }
 
+export async function requestFallback(
+  config: Config,
+  jobId: string
+): Promise<FallbackResponse> {
+  return request<FallbackResponse>(config, "POST", `translate/${jobId}/fallback`);
+}
+
 export async function pollUntilDone(
   config: Config,
   jobId: string,
-  onProgress: (status: JobStatus) => void
+  onProgress: (status: JobStatus) => void,
+  options: { timeoutSeconds?: number; pollIntervalMs?: number } = {}
 ): Promise<JobStatus> {
-  const POLL_INTERVAL = 2000;
+  const pollInterval = options.pollIntervalMs ?? 2000;
+  const timeoutSeconds = options.timeoutSeconds;
+  const timeoutMs = timeoutSeconds === undefined ? undefined : timeoutSeconds * 1000;
+  const deadline = timeoutMs ? Date.now() + timeoutMs : undefined;
 
   while (true) {
-    const status = await getJobStatus(config, jobId);
+    const remaining = deadline ? deadline - Date.now() : undefined;
+    if (remaining !== undefined && remaining <= 0) {
+      throw new TranslationTimeoutError(jobId, timeoutSeconds!);
+    }
+
+    const controller = new AbortController();
+    const timer = remaining === undefined
+      ? undefined
+      : setTimeout(() => controller.abort(), remaining);
+
+    let status: JobStatus;
+    try {
+      status = await getJobStatus(config, jobId, controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted && timeoutSeconds) {
+        throw new TranslationTimeoutError(jobId, timeoutSeconds);
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     onProgress(status);
 
     if (status.status === "completed") return status;
     if (status.status === "failed") {
-      throw new Error(status.error_message || "Translation job failed");
+      throw new TranslationJobFailedError(
+        jobId,
+        status.error_message || "Translation job failed"
+      );
     }
     if (status.status === "cancelled") {
       throw new Error("Translation job was cancelled");
     }
 
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+    const waitMs = remaining === undefined
+      ? pollInterval
+      : Math.min(pollInterval, Math.max(0, deadline! - Date.now()));
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 }

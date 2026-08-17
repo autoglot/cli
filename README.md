@@ -40,6 +40,7 @@ autoglot <file> --lang <codes> [options]
 | `--project` | `-p` | | Project for glossary/style guide (`owner/repo` format) |
 | `--api-key` | `-k` | `AUTOGLOT_API_KEY` env var | API key |
 | `--api-url` | | `https://api.autoglot.app` | API base URL |
+| `--timeout` | | | Maximum wait in seconds, then return the latest compatible cached artifact. Requires `--project` |
 | `--no-cache` | | `false` | Skip translation cache |
 | `--help` | `-h` | | Show help |
 | `--version` | `-v` | | Show version |
@@ -64,6 +65,12 @@ Use a project's glossary and style guide:
 npx @autoglot/cli en.json --lang es,fr --project acme/my-app
 ```
 
+Keep a build moving with cached translations if fresh translation takes more than two minutes:
+
+```bash
+npx @autoglot/cli en.json --lang es,fr --project acme/my-app --timeout 120
+```
+
 Skip cache to force re-translation:
 
 ```bash
@@ -83,6 +90,8 @@ const files = await translate({
   targetLanguages: ['es', 'fr', 'de'],
   sourceLanguage: 'en',
   apiKey: process.env.AUTOGLOT_API_KEY!,
+  project: 'myorg/my-app',
+  timeoutSeconds: 120,
   onProgress: (status) => {
     console.log(`${status.completed_strings}/${status.total_strings}`);
   },
@@ -103,6 +112,7 @@ for (const file of files) {
 | `apiKey` | `string` | Yes | | API key |
 | `apiUrl` | `string` | No | `https://api.autoglot.app` | API base URL |
 | `project` | `string` | No | | Project for glossary/style guide (`owner/repo`) |
+| `timeoutSeconds` | `number` | No | | Maximum wait before returning the latest compatible cached artifact. Requires `project` |
 | `skipCache` | `boolean` | No | `false` | Skip translation cache |
 | `onProgress` | `(status: JobStatus) => void` | No | | Progress callback |
 
