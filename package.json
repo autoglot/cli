@@ -1,11 +1,10 @@
 {
   "name": "@autoglot/cli",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Translate i18n files using autoglot",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xzebra/lexicon.git",
-    "directory": "cli-ts/packages/cli"
+    "url": "git+https://github.com/autoglot/cli.git"
   },
   "bin": {
     "autoglot": "./dist/cli.js"
